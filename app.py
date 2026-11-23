@@ -39,14 +39,14 @@ def _num(x):
 
 def parse_csv(file):
     """يقرأ ملف أسعار CSV (Investing.com / TradingView / غيرهم)."""
-    raw = pd.read_csv(file, sep=None, engine="python")  # يكتشف الفاصل (فاصلة / تاب / ;) تلقائياً
+    raw = pd.read_csv(file, sep=None, engine="python", encoding="utf-8-sig")  # يكتشف الفاصل (فاصلة / تاب / ;) تلقائياً
     cols = {c.strip().lower().rstrip("."): c for c in raw.columns}
     def pick(*names):
         for n in names:
             if n in cols:
                 return cols[n]
-    dcol = pick("date", "time", "التاريخ")
-    ccol = pick("close", "price", "adj close", "الإغلاق", "السعر")
+    dcol = pick("date", "time", "التاريخ", "تاريخ")
+    ccol = pick("close", "price", "adj close", "الإغلاق", "السعر", "الأخير")
     if dcol is None or ccol is None:
         raise ValueError("لازم الملف يحتوي على عمود تاريخ (Date) وعمود إغلاق (Close أو Price)")
     d1 = pd.to_datetime(raw[dcol], errors="coerce")
@@ -54,8 +54,8 @@ def parse_csv(file):
     dates = d1 if d1.isna().sum() <= d2.isna().sum() else d2
     out = pd.DataFrame(index=dates)
     out["Close"] = raw[ccol].map(_num).values
-    for name, alts in {"Open": ("open", "الافتتاح"), "High": ("high", "الأعلى"),
-                       "Low": ("low", "الأدنى"), "Volume": ("volume", "vol", "الحجم")}.items():
+    for name, alts in {"Open": ("open", "الافتتاح", "سعر الفتح", "فتح"), "High": ("high", "الأعلى", "مرتفعة", "الأعلى"),
+                       "Low": ("low", "الأدنى", "منخفضة", "الأدنى"), "Volume": ("volume", "vol", "الحجم")}.items():
         col = pick(*alts)
         out[name] = raw[col].map(_num).values if col else np.nan
     for name in ["Open", "High", "Low"]:
