@@ -23,6 +23,47 @@ def load_info(ticker):
     except Exception:
         return {}
 
+
+def _num(x):
+    """يحوّل نص زي 1,234.5 أو 1.2M إلى رقم."""
+    if pd.isna(x):
+        return np.nan
+    t = str(x).replace(",", "").replace("%", "").strip()
+    mult = {"K": 1e3, "M": 1e6, "B": 1e9}.get(t[-1:].upper(), 1)
+    if mult != 1:
+        t = t[:-1]
+    try:
+        return float(t) * mult
+    except ValueError:
+        return np.nan
+
+def parse_csv(file):
+    """يقرأ ملف أسعار CSV (Investing.com / TradingView / غيرهم)."""
+    raw = pd.read_csv(file)
+    cols = {c.strip().lower().rstrip("."): c for c in raw.columns}
+    def pick(*names):
+        for n in names:
+            if n in cols:
+                return cols[n]
+    dcol = pick("date", "time", "التاريخ")
+    ccol = pick("close", "price", "adj close", "الإغلاق", "السعر")
+    if dcol is None or ccol is None:
+        raise ValueError("لازم الملف يحتوي على عمود تاريخ (Date) وعمود إغلاق (Close أو Price)")
+    d1 = pd.to_datetime(raw[dcol], errors="coerce")
+    d2 = pd.to_datetime(raw[dcol], errors="coerce", dayfirst=True)
+    dates = d1 if d1.isna().sum() <= d2.isna().sum() else d2
+    out = pd.DataFrame(index=dates)
+    out["Close"] = raw[ccol].map(_num).values
+    for name, alts in {"Open": ("open", "الافتتاح"), "High": ("high", "الأعلى"),
+                       "Low": ("low", "الأدنى"), "Volume": ("volume", "vol", "الحجم")}.items():
+        col = pick(*alts)
+        out[name] = raw[col].map(_num).values if col else np.nan
+    for name in ["Open", "High", "Low"]:
+        out[name] = out[name].fillna(out["Close"])
+    out["Volume"] = out["Volume"].fillna(0)
+    out = out[out.index.notna()].dropna(subset=["Close"]).sort_index()
+    return out[~out.index.duplicated()]
+
 # ---------- 2) التحليل الفني ----------
 def add_indicators(df):
     d = df.copy()
@@ -110,9 +151,17 @@ with st.sidebar:
     st.caption("أمثلة: AAPL, MSFT, 2222.SR, COMI.CA")
     period = st.selectbox("الفترة", ["1y", "2y", "5y", "10y"], index=2)
     w_tech = st.slider("وزن التحليل الفني", 0.0, 1.0, 0.6, 0.05)
+    csv_file = st.file_uploader("أو ارفع ملف أسعار CSV", type=["csv"])
+    st.caption("لازم فيه عمود Date وعمود Close (أو Price). التحليل المالي مش بيشتغل مع الملف.")
 
 try:
-    prices = load_prices(ticker, period)
+    if csv_file is not None:
+        prices = parse_csv(csv_file)
+        info = {}
+        st.caption(f"البيانات من الملف المرفوع: {len(prices)} يوم")
+    else:
+        prices = load_prices(ticker, period)
+        info = load_info(ticker)
 except Exception as e:
     st.error(f"مقدرتش أجيب البيانات: {e}")
     st.stop()
@@ -123,7 +172,7 @@ if len(prices) < 220:
 d = add_indicators(prices)
 score = tech_score_series(d)
 tech_now = float(score.dropna().iloc[-1])
-fund_now, fund_table = fundamental_score(load_info(ticker))
+fund_now, fund_table = fundamental_score(info)
 combined, action, note = decide(tech_now, fund_now, w_tech)
 
 c1, c2, c3, c4 = st.columns(4)
