@@ -39,7 +39,7 @@ def _num(x):
 
 def parse_csv(file):
     """يقرأ ملف أسعار CSV (Investing.com / TradingView / غيرهم)."""
-    raw = pd.read_csv(file)
+    raw = pd.read_csv(file, sep=None, engine="python")  # يكتشف الفاصل (فاصلة / تاب / ;) تلقائياً
     cols = {c.strip().lower().rstrip("."): c for c in raw.columns}
     def pick(*names):
         for n in names:
@@ -151,7 +151,7 @@ with st.sidebar:
     st.caption("أمثلة: AAPL, MSFT, 2222.SR, COMI.CA")
     period = st.selectbox("الفترة", ["1y", "2y", "5y", "10y"], index=2)
     w_tech = st.slider("وزن التحليل الفني", 0.0, 1.0, 0.6, 0.05)
-    csv_file = st.file_uploader("أو ارفع ملف أسعار CSV", type=["csv"])
+    csv_file = st.file_uploader("أو ارفع ملف أسعار (CSV / TXT)", type=["csv", "txt", "tsv"])
     st.caption("لازم فيه عمود Date وعمود Close (أو Price). التحليل المالي مش بيشتغل مع الملف.")
 
 try:
